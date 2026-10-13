@@ -1,0 +1,9 @@
+node_modules
+dist
+.expo
+.next
+coverage
+package-lock.json
+apps/web/next-env.d.ts
+apps/mobile/expo-env.d.ts
+apps/web/AGENTS.md

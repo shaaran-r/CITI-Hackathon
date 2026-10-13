@@ -1,0 +1,34 @@
+{
+  "name": "kaushalsetu",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build:shared": "npm run build --workspace=@kaushalsetu/types && npm run build --workspace=@kaushalsetu/ai",
+    "db:generate": "npm run db:generate --workspace=@kaushalsetu/database",
+    "db:migrate": "npm run db:migrate --workspace=@kaushalsetu/database -- --name init",
+    "db:seed": "npm run db:seed --workspace=@kaushalsetu/database",
+    "dev:api": "npm run build:shared && npm run db:generate && npm run start:dev --workspace=@kaushalsetu/api",
+    "dev:web": "npm run build --workspace=@kaushalsetu/types && npm run dev --workspace=@kaushalsetu/web",
+    "dev:mobile": "npm run build --workspace=@kaushalsetu/types && npm run start --workspace=@kaushalsetu/mobile",
+    "test": "npm run test --workspace=@kaushalsetu/ai && npm run test --workspace=@kaushalsetu/api",
+    "build": "npm run build:shared && npm run db:generate && npm run build --workspace=@kaushalsetu/api && npm run build --workspace=@kaushalsetu/web && npm exec --workspace=@kaushalsetu/mobile -- tsc --noEmit"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2"
+  }
+}

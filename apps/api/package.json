@@ -1,0 +1,33 @@
+{
+  "name": "@kaushalsetu/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "test": "tsx --test test/review-wallet.test.ts test/parent-trust.test.ts"
+  },
+  "dependencies": {
+    "@kaushalsetu/ai": "0.1.0",
+    "@kaushalsetu/types": "0.1.0",
+    "@nestjs/common": "^12.1.3",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.1.3",
+    "@nestjs/jwt": "^12.0.3",
+    "@nestjs/platform-express": "^12.1.3",
+    "@nestjs/swagger": "^12.0.2",
+    "@prisma/client": "^6.19.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.8",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.6"
+  }
+}

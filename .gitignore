@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.next/
+.next-review-build/
+.expo/
+.env
+.env.*
+!.env.example
+packages/database/prisma/dev.db
+*.log
+*.tsbuildinfo
+apps/mobile/android/
+apps/mobile/ios/

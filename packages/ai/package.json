@@ -1,0 +1,27 @@
+{
+  "name": "@kaushalsetu/ai",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/recommendations.js",
+  "types": "dist/recommendations.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/recommendations.d.ts",
+      "default": "./dist/recommendations.js"
+    },
+    "./opportunity-matching": {
+      "types": "./dist/opportunity-matching.d.ts",
+      "default": "./dist/opportunity-matching.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test src/recommendations.test.ts src/opportunity-matching.test.ts"
+  },
+  "dependencies": {
+    "@kaushalsetu/types": "0.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}

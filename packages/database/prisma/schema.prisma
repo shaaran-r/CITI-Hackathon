@@ -1,0 +1,313 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String        @id @default(cuid())
+  phone              String        @unique
+  role               String
+  isActive           Boolean       @default(true)
+  refreshTokenHash   String?
+  phoneVerifiedAt    DateTime?
+  deletedAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  student            Student?
+  facilitator        Facilitator?
+  parent             Parent?
+  auditLogs          AuditLog[]    @relation("AuditActor")
+  syncLogs           SyncLog[]
+
+  @@index([role, isActive])
+}
+
+model Student {
+  id                   String              @id @default(cuid())
+  userId               String              @unique
+  facilitatorId        String?
+  displayName          String
+  gradeLevel           String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facilitator          Facilitator?        @relation(fields: [facilitatorId], references: [id], onDelete: SetNull)
+  profile              StudentProfile?
+  parents              ParentStudent[]
+  pathways             StudentPathway[]
+  missionAssignments   MissionAssignment[]
+  badges               StudentBadge[]
+  opportunityMatches   OpportunityMatch[]
+  opportunityApplications OpportunityApplication[]
+
+  @@index([facilitatorId])
+}
+
+model Facilitator {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  fullName  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students  Student[]
+}
+
+model Parent {
+  id        String          @id @default(cuid())
+  userId    String          @unique
+  fullName  String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students  ParentStudent[]
+}
+
+model ParentStudent {
+  parentId  String
+  studentId String
+  relation  String    @default("GUARDIAN")
+  parent    Parent    @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([parentId, studentId])
+  @@index([studentId])
+}
+
+model StudentProfile {
+  id                     String   @id @default(cuid())
+  studentId              String   @unique
+  preferredLanguage      String   @default("hi")
+  interests              String   @default("[]")
+  strengths              String   @default("[]")
+  dailyAvailableMinutes  Int      @default(60)
+  mobility               String   @default("LOCAL_ONLY")
+  district               String?
+  state                  String?
+  deviceAccess           String   @default("SHARED")
+  incomeUrgency          String   @default("MEDIUM")
+  futureGoal             String   @default("BALANCED")
+  completedAt            DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  student                Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([preferredLanguage, incomeUrgency])
+}
+
+model Pathway {
+  id                          String            @id @default(cuid())
+  slug                        String            @unique
+  title                       String
+  category                    String
+  pathwayType                 String
+  description                 String
+  durationWeeks               Int
+  estimatedMonthlyEarningsMin Int               @default(0)
+  estimatedMonthlyEarningsMax Int               @default(0)
+  requiredSkills              String            @default("[]")
+  mobilityRequired            String            @default("LOCAL_ONLY")
+  isDemo                      Boolean           @default(true)
+  isPublished                 Boolean           @default(true)
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+  studentPathways             StudentPathway[]
+
+  @@index([pathwayType, isPublished])
+}
+
+model StudentPathway {
+  id         String   @id @default(cuid())
+  studentId  String
+  pathwayId  String
+  status     String   @default("RECOMMENDED")
+  score      Float
+  rank       Int
+  rationale  String
+  selectedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  pathway    Pathway  @relation(fields: [pathwayId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, pathwayId])
+  @@index([studentId, rank])
+}
+
+model Mission {
+  id                 String              @id @default(cuid())
+  slug               String              @unique
+  title              String
+  description        String
+  skills              String              @default("[]")
+  estimatedMinutes   Int                 @default(30)
+  evidenceTypes      String              @default("NOTE,CHECKLIST")
+  isDemo             Boolean             @default(true)
+  isPublished        Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  assignments        MissionAssignment[]
+
+  @@index([isPublished])
+}
+
+model MissionAssignment {
+  id          String             @id @default(cuid())
+  studentId   String
+  missionId   String
+  status      String             @default("ASSIGNED")
+  assignedAt  DateTime           @default(now())
+  dueAt       DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mission     Mission            @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  submissions MissionSubmission[]
+
+  @@unique([studentId, missionId])
+  @@index([studentId, status])
+}
+
+model MissionSubmission {
+  id            String            @id @default(cuid())
+  assignmentId  String
+  version       Int               @default(1)
+  clientSubmissionId String?       @unique
+  evidenceType  String
+  evidenceNote  String            @default("")
+  evidenceUrl   String?
+  status        String            @default("PENDING")
+  reviewedBy    String?
+  reviewNote    String?
+  submittedAt   DateTime          @default(now())
+  reviewedAt    DateTime?
+  assignment    MissionAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, version])
+  @@index([assignmentId, status])
+}
+
+model SkillBadge {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String
+  description String
+  skill       String
+  isDemo      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  studentBadges StudentBadge[]
+}
+
+model StudentBadge {
+  id          String    @id @default(cuid())
+  studentId   String
+  badgeId     String
+  awardedAt   DateTime  @default(now())
+  verifiedBy  String?
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  badge       SkillBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, badgeId])
+  @@index([studentId, awardedAt])
+}
+
+model Opportunity {
+  id             String             @id @default(cuid())
+  slug           String             @unique
+  title          String
+  type           String
+  provider       String
+  description    String
+  eligibility    String             @default("{}")
+  district       String?
+  state          String?
+  stipendMin     Int?
+  stipendMax     Int?
+  requiredBadgeSlugs String         @default("[]")
+  requiredDocuments  String         @default("[]")
+  pathwaySlugs       String         @default("[]")
+  applyBy        DateTime?
+  isDemo         Boolean            @default(true)
+  isPublished    Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  matches        OpportunityMatch[]
+  applications   OpportunityApplication[]
+
+  @@index([type, isPublished])
+}
+
+model OpportunityMatch {
+  id            String      @id @default(cuid())
+  studentId     String
+  opportunityId String
+  score         Float
+  rationale     String
+  savedAt       DateTime?
+  generatedAt   DateTime    @default(now())
+  recommendedById String?
+  facilitatorNote String?
+  recommendedAt DateTime?
+  createdAt     DateTime    @default(now())
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, opportunityId])
+  @@index([studentId, score])
+}
+
+model OpportunityApplication {
+  id                 String      @id @default(cuid())
+  studentId          String
+  opportunityId      String
+  status             String      @default("IN_PROGRESS")
+  notes              String?
+  documentsChecklist String      @default("[]")
+  helpRequestedAt    DateTime?
+  helpRequestNote    String?
+  facilitatorNote    String?
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  student            Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  opportunity        Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, opportunityId])
+  @@index([studentId, status])
+  @@index([status, helpRequestedAt])
+}
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  status      String
+  detail      String   @default("")
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  action      String
+  entityType  String
+  entityId    String?
+  detail      String   @default("")
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
