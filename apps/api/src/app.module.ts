@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module.js';
 import { accessTokenSecret } from './common/auth-secrets.js';
@@ -23,6 +24,7 @@ import { WalletModule } from './wallet/wallet.module.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: resolve(process.cwd(), '../../.env') }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     JwtModule.register({ global: true, secret: accessTokenSecret }),
     DatabaseModule,
     AuthModule,
@@ -41,6 +43,7 @@ import { WalletModule } from './wallet/wallet.module.js';
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

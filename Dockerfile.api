@@ -1,0 +1,25 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY . .
+
+RUN npm ci
+RUN npm run build:shared
+
+ENV DATABASE_URL=file:/var/lib/kaushalsetu/kaushalsetu.db
+RUN npm run db:generate:deploy --workspace=@kaushalsetu/database
+RUN npm run build --workspace=@kaushalsetu/api
+RUN mkdir -p /var/lib/kaushalsetu \
+    && chown -R node:node /app /var/lib/kaushalsetu
+
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV NEXT_TELEMETRY_DISABLED=1
+USER node
+
+EXPOSE 3001
+CMD ["sh", "-c", "npm run db:migrate:deploy:runtime --workspace=@kaushalsetu/database && npm run start --workspace=@kaushalsetu/api"]

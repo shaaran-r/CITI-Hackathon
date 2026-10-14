@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+COPY . .
+
+RUN npm ci
+RUN npm run build:shared
+
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build --workspace=@kaushalsetu/web
+
+EXPOSE 3000
+CMD ["npm", "run", "start", "--workspace=@kaushalsetu/web"]

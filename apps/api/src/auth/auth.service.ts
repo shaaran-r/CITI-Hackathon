@@ -1,10 +1,11 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { Injectable, UnauthorizedException, UnprocessableEntityException } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service.js';
 import type { RefreshTokenDto, SendOtpDto, VerifyOtpDto } from './auth.dto.js';
 import { accessTokenSecret, refreshTokenSecret } from '../common/auth-secrets.js';
+import { resolveOtpProvider } from './otp-provider.js';
 
 interface TokenClaims {
   sub: string;
@@ -32,21 +33,28 @@ export class AuthService {
   ) {}
 
   async sendOtp(dto: SendOtpDto): Promise<{ accepted: true; devCode?: string }> {
-    if (this.config.get('OTP_PROVIDER', 'mock') !== 'mock') {
-      throw new UnprocessableEntityException('Only mock OTP is configured in this build');
+    const provider = this.otpProvider();
+    if (provider === 'twilio-verify') {
+      await this.requestTwilioCode(dto.phone);
+      return { accepted: true };
     }
 
     const code = this.config.get<string>('DEV_OTP_CODE') ?? '123456';
     this.pendingCodes.set(dto.phone, { code, expiresAt: Date.now() + 5 * 60_000 });
-    if (process.env.NODE_ENV !== 'production') return { accepted: true, devCode: code };
-    return { accepted: true };
+    return { accepted: true, devCode: code };
   }
 
   async verifyOtp(dto: VerifyOtpDto): Promise<Record<string, unknown>> {
-    const pending = this.pendingCodes.get(dto.phone);
-    this.pendingCodes.delete(dto.phone);
-    if (!pending || pending.expiresAt < Date.now() || pending.code !== dto.code) {
-      throw new UnauthorizedException('Code is invalid or expired');
+    const provider = this.otpProvider();
+    if (provider === 'twilio-verify') {
+      const approved = await this.verifyTwilioCode(dto.phone, dto.code);
+      if (!approved) throw new UnauthorizedException('Code is invalid or expired');
+    } else {
+      const pending = this.pendingCodes.get(dto.phone);
+      this.pendingCodes.delete(dto.phone);
+      if (!pending || pending.expiresAt < Date.now() || pending.code !== dto.code) {
+        throw new UnauthorizedException('Code is invalid or expired');
+      }
     }
 
     const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
@@ -183,5 +191,64 @@ export class AuthService {
 
   private hash(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private otpProvider(): 'mock' | 'twilio-verify' {
+    try {
+      return resolveOtpProvider({
+        NODE_ENV: process.env.NODE_ENV,
+        OTP_PROVIDER: this.config.get<string>('OTP_PROVIDER'),
+        TWILIO_ACCOUNT_SID: this.config.get<string>('TWILIO_ACCOUNT_SID'),
+        TWILIO_AUTH_TOKEN: this.config.get<string>('TWILIO_AUTH_TOKEN'),
+        TWILIO_VERIFY_SERVICE_SID: this.config.get<string>('TWILIO_VERIFY_SERVICE_SID'),
+      });
+    } catch {
+      throw new ServiceUnavailableException('Configure OTP_PROVIDER as twilio-verify');
+    }
+  }
+
+  private async requestTwilioCode(phone: string): Promise<void> {
+    await this.twilioVerifyRequest('Verifications', { To: phone, Channel: 'sms' });
+  }
+
+  private async verifyTwilioCode(phone: string, code: string): Promise<boolean> {
+    const result = await this.twilioVerifyRequest('VerificationCheck', { To: phone, Code: code });
+    return result.status === 'approved';
+  }
+
+  private async twilioVerifyRequest(
+    action: 'Verifications' | 'VerificationCheck',
+    fields: Record<string, string>,
+  ): Promise<{ status?: string }> {
+    const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID')?.trim();
+    const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN')?.trim();
+    const serviceSid = this.config.get<string>('TWILIO_VERIFY_SERVICE_SID')?.trim();
+    if (!accountSid || !authToken || !serviceSid) {
+      throw new ServiceUnavailableException('Twilio Verify is not fully configured');
+    }
+
+    const authorization = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    const body = new URLSearchParams(fields);
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://verify.twilio.com/v2/Services/${encodeURIComponent(serviceSid)}/${action}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${authorization}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body,
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+    } catch {
+      throw new ServiceUnavailableException('OTP delivery service is unavailable');
+    }
+    if (!response.ok) {
+      throw new ServiceUnavailableException('OTP delivery service rejected the request');
+    }
+    return (await response.json()) as { status?: string };
   }
 }

@@ -41,11 +41,12 @@ npm.cmd run db:migrate
 npm.cmd run db:seed
 ```
 
-The local database is SQLite at `packages/database/prisma/dev.db`, which is ignored by Git. The
-first runnable slice uses it so no database service is needed; production PostgreSQL configuration
-is a deployment follow-up. OTP is mock-only: request a code and use `123456` locally. Never use the
-mock OTP provider in production. Do not put real credentials in `.env.example` or commit local
-`.env` files.
+The development database is SQLite at `packages/database/prisma/dev.db`, which is ignored by Git.
+It avoids a separate service for local work. The single-instance pilot container also uses SQLite on
+a persistent volume; it is not suitable for horizontal scaling. A broader launch needs managed
+PostgreSQL, backup/restore procedures, and a reviewed migration. OTP uses the mock provider only in
+development (`123456`); production startup rejects mock OTP. Never put real credentials in
+`.env.example` or commit local environment files.
 
 Start each app in a separate terminal from the repository root:
 
@@ -55,7 +56,7 @@ npm.cmd run dev:web
 npm.cmd run dev:mobile
 ```
 
-The API listens on `http://localhost:3001`; Swagger is at `/docs`. The facilitator shell is at
+The API listens on `http://localhost:3001`; Swagger is at `/docs` in development. The facilitator shell is at
 `http://localhost:3000`. For a physical phone, set `EXPO_PUBLIC_API_URL` to the computer's LAN
 address before starting Expo; Android emulators can use `http://10.0.2.2:3001`.
 
@@ -94,6 +95,44 @@ Onboarding drafts and the mission evidence outbox persist in SQLite. Pathways, m
 official source links, and published module text are cached for reading. Mutations such as pathway
 selection, applications, partner submission, and module publishing still require a live API
 connection; background synchronization and binary media upload are not implemented.
+
+## Pilot Deployment
+
+The repository includes API and web containers for a single-instance pilot. Copy
+`.env.production.example` to `.env.production`, populate distinct JWT secrets, Twilio Verify
+credentials, and the real web origin, then set `NEXT_PUBLIC_API_BASE_URL` in the shell to the
+browser-reachable HTTPS API URL before building. Start with `docker compose up --build -d` and check
+`/health`. The Compose ports bind to loopback; terminate TLS and route the web/API hostnames through
+a reverse proxy. Never commit `.env.production`.
+
+For a self-hosted pilot on a Linux Docker host:
+
+```bash
+cp .env.production.example .env.production
+# Edit .env.production with real, unique JWT secrets, Twilio Verify credentials, and HTTPS origins.
+export NEXT_PUBLIC_API_BASE_URL=https://api.example.org
+docker compose up --build -d
+docker compose ps
+```
+
+Route `https://app.example.org` to host loopback port `3000` and `https://api.example.org` to
+loopback port `3001` through a TLS reverse proxy. Set `WEB_BASE_URL` and `CORS_ORIGINS` to the real
+web origin, and set `TRUST_PROXY_HOPS` to the exact number of trusted proxies (usually `1` for this
+single-proxy layout). The API caps general traffic at 120 requests per minute per client IP, OTP
+send at 5 per 10 minutes per IP/phone, and OTP verify at 10 per 10 minutes per IP/phone. This uses
+in-memory storage, so run exactly one API instance until a shared rate-limit store is configured.
+Configure Twilio Verify service fraud controls before allowing public OTP requests. Keep
+`ENABLE_SWAGGER=false` in production. For Android, set the EAS preview
+`EXPO_PUBLIC_API_URL` to `https://api.example.org` and rebuild; the API URL is embedded at build
+time.
+
+The current production container persists SQLite on a named volume and is limited to one API
+instance. It is a deployable pilot, not a horizontally scalable national service. Before broader
+release, move to managed PostgreSQL with reviewed migrations/backups, add distributed rate limiting,
+monitoring and alerting, establish data-retention and verifiable guardian-consent policy, and
+complete a security and privacy review. Do not enable external LLM processing for minors until the
+consent and provider data-processing terms are reviewed. The `.env.production.example` deliberately
+leaves all secrets blank so startup fails until real provider credentials are configured.
 
 To build an installable Android preview APK, sign in to Expo, link this app to an EAS project when
 prompted, and set `EXPO_PUBLIC_API_URL` in that project's `preview` environment to an API URL
