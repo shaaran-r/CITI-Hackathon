@@ -8,6 +8,12 @@
     "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],
     "experiments": { "typedRoutes": true },
-    "android": { "package": "org.kaushalsetu.mobile" }
+    "android": { "package": "org.kaushalsetu.mobile" },
+    "owner": "sharan-1447",
+    "extra": {
+      "eas": {
+        "projectId": "4a7de188-b306-4caf-aa4f-65faa3e0c1a6"
+      }
+    }
   }
 }
