@@ -139,6 +139,13 @@ export default function LoginScreen(): React.JSX.Element {
           >
             <Text style={styles.secondaryText}>Family view · परिवार के लिए</Text>
           </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push('/resources')}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Government learning sources · सरकारी संसाधन</Text>
+          </Pressable>
         </View>
         <Text style={styles.footer}>Your answers stay on this phone until you submit them.</Text>
       </View>

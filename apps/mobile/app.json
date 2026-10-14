@@ -6,7 +6,18 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow KaushalSetu to use your microphone for voice discovery.",
+          "speechRecognitionPermission": "Allow KaushalSetu to transcribe your voice for voice discovery."
+        }
+      ]
+    ],
     "experiments": { "typedRoutes": true },
     "android": { "package": "org.kaushalsetu.mobile" },
     "owner": "sharan-1447",

@@ -34,6 +34,33 @@ interface ApplicationSupportItem {
   opportunity: { id: string; title: string; type: string; isDemo: boolean };
 }
 
+interface LearningModuleItem {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  language: string;
+  lessons: string[];
+  pricingModel: 'FREE' | 'ONE_TIME' | 'SUBSCRIPTION';
+  priceInr: number;
+  status: 'DRAFT' | 'PUBLISHED';
+}
+
+interface PartnerApplicationItem {
+  id: string;
+  partnerType: 'MENTOR' | 'EMPLOYER' | 'NGO';
+  contactName: string;
+  organizationName: string | null;
+  email: string;
+  website: string | null;
+  state: string | null;
+  district: string | null;
+  focusAreas: string[];
+  message: string;
+  status: string;
+  createdAt: string;
+}
+
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
 async function readError(response: Response): Promise<string> {
@@ -54,8 +81,20 @@ export default function ReviewQueue(): React.JSX.Element {
   const [token, setToken] = useState('');
   const [queue, setQueue] = useState<ReviewItem[]>([]);
   const [applicationQueue, setApplicationQueue] = useState<ApplicationSupportItem[]>([]);
+  const [learningModules, setLearningModules] = useState<LearningModuleItem[]>([]);
+  const [partnerApplications, setPartnerApplications] = useState<PartnerApplicationItem[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState('');
+  const [moduleBusy, setModuleBusy] = useState(false);
+  const [moduleTitle, setModuleTitle] = useState('');
+  const [moduleDescription, setModuleDescription] = useState('');
+  const [moduleCategory, setModuleCategory] = useState('Practical skills');
+  const [moduleLanguage, setModuleLanguage] = useState('hi');
+  const [moduleLessons, setModuleLessons] = useState('');
+  const [pricingModel, setPricingModel] = useState<'FREE' | 'ONE_TIME' | 'SUBSCRIPTION'>('FREE');
+  const [priceInr, setPriceInr] = useState('0');
+  const [moduleError, setModuleError] = useState('');
+  const [moduleMessage, setModuleMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -73,6 +112,18 @@ export default function ReviewQueue(): React.JSX.Element {
       if (!applicationResponse.ok) throw new Error(await readError(applicationResponse));
       setQueue((await reviewResponse.json()) as ReviewItem[]);
       setApplicationQueue((await applicationResponse.json()) as ApplicationSupportItem[]);
+      const moduleResponse = await fetch(`${apiBase}/facilitator/modules`, {
+        headers,
+        cache: 'no-store',
+      });
+      if (!moduleResponse.ok) throw new Error(await readError(moduleResponse));
+      setLearningModules((await moduleResponse.json()) as LearningModuleItem[]);
+      const partnerResponse = await fetch(`${apiBase}/facilitator/partner-applications`, {
+        headers,
+        cache: 'no-store',
+      });
+      if (!partnerResponse.ok) throw new Error(await readError(partnerResponse));
+      setPartnerApplications((await partnerResponse.json()) as PartnerApplicationItem[]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load the review queue.');
     } finally {
@@ -212,6 +263,103 @@ export default function ReviewQueue(): React.JSX.Element {
     }
   }
 
+  async function createLearningModule(): Promise<void> {
+    const lessons = moduleLessons
+      .split('\n')
+      .map((lesson) => lesson.trim())
+      .filter(Boolean);
+    const price = Number(priceInr);
+    if (!moduleTitle.trim() || !moduleDescription.trim() || lessons.length === 0) {
+      setModuleError('Add a title, a short description, and at least one lesson.');
+      return;
+    }
+    if (!Number.isInteger(price) || price < 0 || (pricingModel !== 'FREE' && price === 0)) {
+      setModuleError('Set a valid whole-rupee price for the selected pricing model.');
+      return;
+    }
+    setModuleBusy(true);
+    setModuleError('');
+    setModuleMessage('');
+    try {
+      const response = await fetch(`${apiBase}/facilitator/modules`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: moduleTitle,
+          description: moduleDescription,
+          category: moduleCategory,
+          language: moduleLanguage,
+          lessons,
+          pricingModel,
+          priceInr: pricingModel === 'FREE' ? 0 : price,
+        }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const created = (await response.json()) as LearningModuleItem;
+      setLearningModules((current) => [created, ...current]);
+      setModuleTitle('');
+      setModuleDescription('');
+      setModuleLessons('');
+      setModuleMessage('Draft saved. Review it before publishing.');
+    } catch (cause) {
+      setModuleError(cause instanceof Error ? cause.message : 'Could not save this module.');
+    } finally {
+      setModuleBusy(false);
+    }
+  }
+
+  async function publishLearningModule(moduleId: string): Promise<void> {
+    setModuleBusy(true);
+    setModuleError('');
+    setModuleMessage('');
+    try {
+      const response = await fetch(`${apiBase}/facilitator/modules/${moduleId}/publish`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const published = (await response.json()) as LearningModuleItem;
+      setLearningModules((current) =>
+        current.map((module) => (module.id === published.id ? published : module)),
+      );
+      setModuleMessage('Module published to the student library.');
+    } catch (cause) {
+      setModuleError(cause instanceof Error ? cause.message : 'Could not publish this module.');
+    } finally {
+      setModuleBusy(false);
+    }
+  }
+
+  async function updatePartnerStatus(
+    applicationId: string,
+    status: 'REVIEWED' | 'ACCEPTED' | 'DECLINED',
+  ): Promise<void> {
+    setModuleBusy(true);
+    setModuleError('');
+    setModuleMessage('');
+    try {
+      const response = await fetch(
+        `${apiBase}/facilitator/partner-applications/${applicationId}/status`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      setPartnerApplications((current) =>
+        current.filter((application) => application.id !== applicationId),
+      );
+      setModuleMessage(`Partner application marked ${status.toLowerCase()}.`);
+    } catch (cause) {
+      setModuleError(
+        cause instanceof Error ? cause.message : 'Could not update this partner application.',
+      );
+    } finally {
+      setModuleBusy(false);
+    }
+  }
+
   if (!token) {
     return (
       <div className="review-login">
@@ -289,6 +437,8 @@ export default function ReviewQueue(): React.JSX.Element {
               setToken('');
               setQueue([]);
               setApplicationQueue([]);
+              setLearningModules([]);
+              setPartnerApplications([]);
               setMessage('');
             }}
           >
@@ -455,6 +605,199 @@ export default function ReviewQueue(): React.JSX.Element {
                     </button>
                   </>
                 )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="module-studio" id="learning-studio" aria-labelledby="module-studio-title">
+        <div className="support-heading">
+          <h3 id="module-studio-title">Learning module studio</h3>
+          <span>Create for your assigned learning community</span>
+        </div>
+        <p className="module-disclaimer">
+          Set a free, one-time, or monthly price label. This prototype does not collect payments.
+          Confirm course quality, learner safety, and all costs before publishing.
+        </p>
+        <div className="module-form">
+          <label htmlFor="module-title">Module title</label>
+          <input
+            id="module-title"
+            maxLength={100}
+            value={moduleTitle}
+            onChange={(event) => setModuleTitle(event.target.value)}
+          />
+          <label htmlFor="module-description">What learners will practice</label>
+          <textarea
+            id="module-description"
+            maxLength={1000}
+            value={moduleDescription}
+            onChange={(event) => setModuleDescription(event.target.value)}
+          />
+          <div className="module-form-row">
+            <div>
+              <label htmlFor="module-category">Skill area</label>
+              <input
+                id="module-category"
+                maxLength={80}
+                value={moduleCategory}
+                onChange={(event) => setModuleCategory(event.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="module-language">Language</label>
+              <select
+                id="module-language"
+                value={moduleLanguage}
+                onChange={(event) => setModuleLanguage(event.target.value)}
+              >
+                <option value="hi">Hindi</option>
+                <option value="en">English</option>
+                <option value="mr">Marathi</option>
+                <option value="bn">Bengali</option>
+              </select>
+            </div>
+          </div>
+          <label htmlFor="module-lessons">Lessons, one per line</label>
+          <textarea
+            id="module-lessons"
+            maxLength={6000}
+            placeholder="Observe a local example\nPractice one safe task\nReflect with your facilitator"
+            value={moduleLessons}
+            onChange={(event) => setModuleLessons(event.target.value)}
+          />
+          <div className="module-form-row">
+            <div>
+              <label htmlFor="module-pricing">Offer type</label>
+              <select
+                id="module-pricing"
+                value={pricingModel}
+                onChange={(event) => {
+                  const next = event.target.value as typeof pricingModel;
+                  setPricingModel(next);
+                  if (next === 'FREE') setPriceInr('0');
+                  else if (priceInr === '0') setPriceInr('1');
+                }}
+              >
+                <option value="FREE">Free</option>
+                <option value="ONE_TIME">Pay per module</option>
+                <option value="SUBSCRIPTION">Monthly subscription</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="module-price">
+                {pricingModel === 'SUBSCRIPTION' ? 'Monthly price (₹)' : 'Price (₹)'}
+              </label>
+              <input
+                id="module-price"
+                disabled={pricingModel === 'FREE'}
+                inputMode="numeric"
+                min="0"
+                value={priceInr}
+                onChange={(event) => setPriceInr(event.target.value)}
+              />
+            </div>
+          </div>
+          {moduleError && (
+            <p className="review-error" role="alert">
+              {moduleError}
+            </p>
+          )}
+          {moduleMessage && (
+            <p className="review-message" role="status">
+              {moduleMessage}
+            </p>
+          )}
+          <button
+            className="review-primary module-save"
+            disabled={moduleBusy}
+            onClick={() => void createLearningModule()}
+          >
+            {moduleBusy ? 'Saving…' : 'Save draft'}
+          </button>
+        </div>
+        <div className="module-list">
+          {learningModules.map((module) => (
+            <article className="module-item" key={module.id}>
+              <div>
+                <span className={`module-status ${module.status.toLowerCase()}`}>
+                  {module.status === 'PUBLISHED' ? 'Published' : 'Draft'}
+                </span>
+                <h4>{module.title}</h4>
+                <p>{module.description}</p>
+                <small>
+                  {module.category} · {module.language.toUpperCase()} · {module.lessons.length}{' '}
+                  lessons ·{' '}
+                  {module.pricingModel === 'FREE'
+                    ? 'Free'
+                    : module.pricingModel === 'SUBSCRIPTION'
+                      ? `₹${module.priceInr}/month`
+                      : `₹${module.priceInr} one-time`}
+                </small>
+              </div>
+              {module.status === 'DRAFT' && (
+                <button
+                  className="review-approve"
+                  disabled={moduleBusy}
+                  onClick={() => void publishLearningModule(module.id)}
+                >
+                  Publish
+                </button>
+              )}
+            </article>
+          ))}
+          {!learningModules.length && (
+            <p className="support-empty">Your modules will appear here.</p>
+          )}
+        </div>
+      </section>
+      <section className="partner-review" aria-labelledby="partner-review-title">
+        <div className="support-heading">
+          <h3 id="partner-review-title">Partner applications</h3>
+          <span>{partnerApplications.length} awaiting review</span>
+        </div>
+        {!partnerApplications.length && (
+          <p className="support-empty">
+            New mentor, employer, and NGO applications will appear here.
+          </p>
+        )}
+        <div className="module-list">
+          {partnerApplications.map((application) => (
+            <article className="module-item" key={application.id}>
+              <div>
+                <span className="module-status">{application.partnerType}</span>
+                <h4>{application.organizationName || application.contactName}</h4>
+                <p>{application.message}</p>
+                <small>
+                  {application.contactName} · {application.email}
+                  {application.district || application.state
+                    ? ` · ${[application.district, application.state].filter(Boolean).join(', ')}`
+                    : ''}
+                </small>
+                <small>Focus: {application.focusAreas.join(', ')}</small>
+              </div>
+              <div className="partner-review-actions">
+                <button
+                  className="review-approve"
+                  disabled={moduleBusy}
+                  onClick={() => void updatePartnerStatus(application.id, 'ACCEPTED')}
+                >
+                  Accept
+                </button>
+                <button
+                  className="review-resubmit"
+                  disabled={moduleBusy}
+                  onClick={() => void updatePartnerStatus(application.id, 'REVIEWED')}
+                >
+                  Mark reviewed
+                </button>
+                <button
+                  className="review-reject"
+                  disabled={moduleBusy}
+                  onClick={() => void updatePartnerStatus(application.id, 'DECLINED')}
+                >
+                  Decline
+                </button>
               </div>
             </article>
           ))}

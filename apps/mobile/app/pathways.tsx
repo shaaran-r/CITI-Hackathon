@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
+import { Linking } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as Speech from 'expo-speech';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getRecommendations, selectPathway, type PathwayCard } from '../src/api';
+import { getLearningAdvice, getRecommendations, selectPathway, type PathwayCard } from '../src/api';
+import type { LearningAdvice } from '@kaushalsetu/types';
 import { readLocalJson, writeLocalJson } from '../src/local-store';
+import type { OnboardingAnswers } from '@kaushalsetu/types';
 
 const colors = {
   ink: '#183b32',
@@ -27,12 +31,18 @@ export default function PathwaysScreen(): React.JSX.Element {
   const [cards, setCards] = useState<PathwayCard[]>([]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [language, setLanguage] = useState('hi');
+  const [advice, setAdvice] = useState<LearningAdvice | null>(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [adviceError, setAdviceError] = useState('');
 
   useEffect(() => {
     let active = true;
     void (async () => {
       const cached = await readLocalJson<PathwayCard[]>(database, 'cached_recommendations');
       if (cached && active) setCards(cached);
+      const profile = await readLocalJson<OnboardingAnswers>(database, 'cached_profile');
+      if (profile && active) setLanguage(profile.preferredLanguage);
       const studentId = await SecureStore.getItemAsync('studentId');
       if (!studentId) {
         if (active) {
@@ -73,6 +83,33 @@ export default function PathwaysScreen(): React.JSX.Element {
     }
   }
 
+  function readPathwayAloud(card: PathwayCard): void {
+    const guidance: Record<string, string> = {
+      hi: 'यह आपकी रुचियों के आधार पर एक सुझाव है, नौकरी या आय की गारंटी नहीं। अपने फैसले पर भरोसेमंद फ़ैसिलिटेटर से बात करें।',
+      en: 'This is a suggestion based on your interests, not a promise of work or income. Discuss your next step with a trusted facilitator.',
+      mr: 'हा तुमच्या आवडींवर आधारित एक पर्याय आहे; नोकरी किंवा उत्पन्नाची हमी नाही. पुढील पायरीबद्दल विश्वासू मार्गदर्शकाशी बोला.',
+      bn: 'এটি আপনার আগ্রহের ভিত্তিতে একটি পরামর্শ, কাজ বা আয়ের নিশ্চয়তা নয়। পরের পদক্ষেপ নিয়ে বিশ্বস্ত সহায়কের সঙ্গে কথা বলুন।',
+    };
+    Speech.stop();
+    Speech.speak(`${card.title}. ${guidance[language] ?? guidance.hi}`, {
+      language: { hi: 'hi-IN', en: 'en-IN', mr: 'mr-IN', bn: 'bn-IN' }[language] ?? 'hi-IN',
+    });
+  }
+
+  async function requestAdvice(): Promise<void> {
+    setAdviceLoading(true);
+    setAdviceError('');
+    try {
+      const studentId = await SecureStore.getItemAsync('studentId');
+      if (!studentId) throw new Error('Sign in to get learning advice.');
+      setAdvice(await getLearningAdvice(studentId));
+    } catch (cause) {
+      setAdviceError(cause instanceof Error ? cause.message : 'Learning advice is unavailable.');
+    } finally {
+      setAdviceLoading(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -81,6 +118,46 @@ export default function PathwaysScreen(): React.JSX.Element {
         <Text style={styles.subtitle}>
           A starting point based on what you shared. You are in charge of what comes next.
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={adviceLoading}
+          onPress={() => void requestAdvice()}
+          style={styles.adviceButton}
+        >
+          <Text style={styles.adviceButtonText}>
+            {adviceLoading ? 'Thinking…' : 'Ask the learning guide'}
+          </Text>
+        </Pressable>
+        {!!adviceError && (
+          <Text accessibilityRole="alert" style={styles.message}>
+            {adviceError}
+          </Text>
+        )}
+        {advice && (
+          <View style={styles.advicePanel}>
+            <Text style={styles.adviceMode}>
+              {advice.mode === 'LLM' ? 'SOURCE-GROUNDED AI' : 'EXPLAINABLE GUIDE'}
+            </Text>
+            <Text style={styles.adviceSummary}>{advice.summary}</Text>
+            {advice.nextSteps.map((step, index) => (
+              <View key={`${index}-${step.text}`} style={styles.adviceStep}>
+                <Text style={styles.stepDescription}>{step.text}</Text>
+                <View style={styles.adviceSources}>
+                  {step.sources.map((source) => (
+                    <Pressable
+                      accessibilityRole="link"
+                      key={`${step.text}-${source.name}`}
+                      onPress={() => void Linking.openURL(source.url)}
+                    >
+                      <Text style={styles.sourceLinkText}>{source.name} ↗</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))}
+            <Text style={styles.guidanceNote}>{advice.note}</Text>
+          </View>
+        )}
         {loading && cards.length === 0 && (
           <ActivityIndicator color={colors.leaf} size="large" style={styles.loader} />
         )}
@@ -117,6 +194,45 @@ export default function PathwaysScreen(): React.JSX.Element {
               </Text>
             )}
             <Text style={styles.rationale}>{card.rationale}</Text>
+            <Text style={styles.sectionTitle}>What to learn next</Text>
+            {(card.learningSteps ?? []).map((step) => (
+              <View key={`${card.id}-${step.title}`} style={styles.learningStep}>
+                <Text style={styles.stepTitle}>{step.title}</Text>
+                <Text style={styles.stepDescription}>{step.description}</Text>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => void Linking.openURL(step.sourceUrl)}
+                  style={styles.sourceLink}
+                >
+                  <Text style={styles.sourceLinkText}>Explore {step.sourceName} ↗</Text>
+                </Pressable>
+              </View>
+            ))}
+            {(card.examOptions ?? []).length > 0 && (
+              <View style={styles.examSection}>
+                <Text style={styles.sectionTitle}>Exam to explore</Text>
+                {(card.examOptions ?? []).map((exam) => (
+                  <View key={`${card.id}-${exam.name}`}>
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => void Linking.openURL(exam.url)}
+                      style={styles.sourceLink}
+                    >
+                      <Text style={styles.sourceLinkText}>{exam.name} ↗</Text>
+                    </Pressable>
+                    <Text style={styles.stepDescription}>{exam.relevance}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <Text style={styles.guidanceNote}>{card.guidanceNote}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => readPathwayAloud(card)}
+              style={styles.listenButton}
+            >
+              <Text style={styles.listenText}>Hear guidance · सुनें</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => void choose(card.id)}
@@ -150,6 +266,13 @@ export default function PathwaysScreen(): React.JSX.Element {
           style={styles.missionsButton}
         >
           <Text style={styles.missionsButtonText}>Go to my missions</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/modules')}
+          style={styles.modulesButton}
+        >
+          <Text style={styles.modulesButtonText}>Explore facilitator lessons</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -196,6 +319,14 @@ const styles = StyleSheet.create({
   metaText: { color: colors.ink, fontWeight: '700', fontSize: 12 },
   earnings: { color: colors.ink, fontSize: 12, marginTop: 9 },
   rationale: { color: colors.leaf, fontSize: 13, lineHeight: 19, marginTop: 11 },
+  sectionTitle: { color: colors.ink, fontSize: 13, fontWeight: '800', marginTop: 12 },
+  learningStep: { borderLeftWidth: 2, borderLeftColor: colors.line, paddingLeft: 10, marginTop: 9 },
+  stepTitle: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  stepDescription: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
+  sourceLink: { minHeight: 34, justifyContent: 'center', alignSelf: 'flex-start' },
+  sourceLinkText: { color: colors.leaf, fontSize: 12, fontWeight: '800' },
+  examSection: { borderTopWidth: 1, borderTopColor: colors.line, marginTop: 12, paddingTop: 2 },
+  guidanceNote: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 8 },
   selectButton: {
     marginTop: 15,
     borderColor: colors.leaf,
@@ -221,6 +352,40 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   missionsButtonText: { color: colors.white, fontWeight: '800' },
+  modulesButton: {
+    minHeight: 50,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.leaf,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  modulesButtonText: { color: colors.leaf, fontWeight: '800' },
+  adviceButton: {
+    alignSelf: 'flex-start',
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 13,
+    borderRadius: 8,
+    backgroundColor: colors.leaf,
+    marginTop: 12,
+  },
+  adviceButtonText: { color: colors.white, fontSize: 12, fontWeight: '800' },
+  advicePanel: {
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    backgroundColor: colors.white,
+  },
+  adviceMode: { color: colors.saffron, fontSize: 10, fontWeight: '900' },
+  adviceSummary: { color: colors.ink, fontSize: 14, lineHeight: 20, marginTop: 6 },
+  adviceStep: { borderTopWidth: 1, borderTopColor: colors.line, marginTop: 10, paddingTop: 8 },
+  adviceSources: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  listenButton: { minHeight: 40, justifyContent: 'center', alignSelf: 'flex-start', marginTop: 4 },
+  listenText: { color: colors.leaf, fontWeight: '700', fontSize: 13 },
   button: {
     backgroundColor: colors.leaf,
     minHeight: 50,

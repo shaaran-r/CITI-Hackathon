@@ -3,6 +3,7 @@ import { recommendPathways } from '@kaushalsetu/ai';
 import { pathwayTypes } from '@kaushalsetu/types';
 import type { OnboardingAnswers, PathwayCandidate, PathwayType } from '@kaushalsetu/types';
 import { PrismaService } from '../prisma.service.js';
+import { pathwayLearningGuidance } from '../pathways/pathway-guidance.js';
 import type { CompleteProfileDto } from './profiling.dto.js';
 
 function parseList(value: string): string[] {
@@ -125,6 +126,7 @@ export class ProfilingService {
         category: pathway.category,
         pathwayType: pathway.pathwayType,
         description: pathway.description,
+        ...pathwayLearningGuidance(pathway.slug),
         durationWeeks: pathway.durationWeeks,
         estimatedMonthlyEarningsMin: pathway.estimatedMonthlyEarningsMin,
         estimatedMonthlyEarningsMax: pathway.estimatedMonthlyEarningsMax,

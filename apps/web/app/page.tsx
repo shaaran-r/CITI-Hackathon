@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Compass,
   GraduationCap,
+  Handshake,
   Users,
 } from 'lucide-react';
 import { pathwayTypes } from '@kaushalsetu/types';
@@ -26,7 +27,8 @@ const links = [
   { label: 'Students', icon: Users },
   { label: 'Pathways', icon: GraduationCap },
   { label: 'Missions', icon: ClipboardCheck, href: '#review-queue' },
-  { label: 'Learning', icon: BookOpenCheck },
+  { label: 'Learning', icon: BookOpenCheck, href: '#learning-studio' },
+  { label: 'Partners', icon: Handshake, href: '/partners' },
 ];
 
 export default async function DashboardPage(): Promise<React.JSX.Element> {

@@ -35,6 +35,39 @@ export interface PathwayCandidate {
   mobilityRequired: Mobility;
 }
 
+export interface PathwayLearningStep {
+  title: string;
+  description: string;
+  sourceName: string;
+  sourceUrl: string;
+}
+
+export interface PathwayExamOption {
+  name: string;
+  url: string;
+  relevance: string;
+}
+
+export interface PathwayLearningGuidance {
+  learningSteps: PathwayLearningStep[];
+  examOptions: PathwayExamOption[];
+  guidanceNote: string;
+}
+
+export interface LearningModuleCard {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  language: string;
+  lessons: string[];
+  pricingModel: 'FREE' | 'ONE_TIME' | 'SUBSCRIPTION';
+  priceInr: number;
+  status: 'DRAFT' | 'PUBLISHED';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PathwayRecommendation extends PathwayCandidate {
   score: number;
   rank: number;
@@ -101,4 +134,21 @@ export interface OpportunityRecommendation extends OpportunityCandidate {
   eligible: boolean;
   reasons: string[];
   missingRequirements: string[];
+}
+
+export interface InitiativeSource {
+  id: string;
+  name: string;
+  category: string;
+  overview: string;
+  officialUrl: string;
+  useFor: string;
+  dataStatus: 'REFERENCE_ONLY';
+}
+
+export interface LearningAdvice {
+  mode: 'LLM' | 'RULES_BASED';
+  summary: string;
+  nextSteps: { text: string; sources: { name: string; url: string }[] }[];
+  note: string;
 }

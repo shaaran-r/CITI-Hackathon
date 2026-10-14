@@ -18,14 +18,14 @@ packages/
   utils/     Shared utilities
 ```
 
-The first vertical slice includes a NestJS API, Prisma schema and SQLite migration, seeded demo
-records, Expo onboarding with local SQLite draft persistence, deterministic pathway scoring, and
-a Next.js facilitator review queue. The mission flow now supports facilitator assignment, student
-submission, offline-queued note/checklist evidence, facilitator decisions, idempotent badge issuance,
-and a student Skill Wallet. The Opportunity Locker adds profile-and-wallet-based eligibility,
-explainable ranking, bookmarks, application tracking, help requests, and facilitator referrals.
-Parent Trust Mode provides linked-child progress, pathway and opportunity explanations, and a
-Door-Opener timeline. Binary photo/audio/video workflows remain deferred.
+The prototype includes student onboarding, multilingual voice input/output, explainable pathway
+recommendations with cited next-learning steps, a source-linked official portal directory, and a
+student library for facilitator-authored lessons. Students can cache pathways, opportunities,
+official sources, published text lessons, and mission evidence locally. Facilitators can review
+mission submissions, recommend opportunities, publish free or priced learning modules, and review
+mentor/employer/NGO interest applications. Parent Trust Mode provides linked-child progress and a
+Door-Opener timeline. Binary photo/audio/video evidence and actual payment processing remain out of
+scope.
 
 ## Requirements
 
@@ -59,9 +59,47 @@ The API listens on `http://localhost:3001`; Swagger is at `/docs`. The facilitat
 `http://localhost:3000`. For a physical phone, set `EXPO_PUBLIC_API_URL` to the computer's LAN
 address before starting Expo; Android emulators can use `http://10.0.2.2:3001`.
 
+## Learning And AI
+
+The onboarding voice controls use Android/iOS speech recognition services and device text-to-speech
+for Hindi, English, Marathi, and Bengali. Recognition availability and offline language models depend
+on the phone's installed speech services. Transcription is handled by the phone's selected speech
+service and may use that provider's network service; KaushalSetu does not persist recorded audio.
+
+`GET /sources` returns official reference portals for DIKSHA, SWAYAM, Skill India Digital Hub, NAPS,
+the National Scholarship Portal, AISHE, and BHASHINI. Pathway cards use curated next-step guidance
+and link to official resources and selected exam portals. These links are references, not live
+program feeds; dates, eligibility, course availability, and costs must be confirmed on the official
+site. Demo opportunity records remain fictional.
+
+`GET /learning/advice/:studentId` returns source-linked rules-based guidance when no model is
+configured. To use an OpenAI-compatible chat-completions provider, set `LLM_CHAT_COMPLETIONS_URL`,
+`LLM_MODEL`, and (when required) `LLM_API_KEY` in the API environment. Only grade, interests,
+strengths, selected pathway, and the curated source directory are sent; phone number and student
+name are not. The model response is constrained to supplied source IDs and remains guidance, not an
+eligibility decision. No LLM provider is included or configured by default.
+
+## Facilitators And Partners
+
+The facilitator dashboard's Learning section creates drafts with text lessons and a language label,
+then publishes them to the mobile library. Pricing metadata supports free, one-time, and monthly
+subscription offers. The prototype does not collect payments, enroll learners, or verify course
+credentials. Partner applications are consent-based and can be reviewed by facilitator accounts;
+contact details are stored in the local database, so this flow needs access controls, retention
+policy, and production privacy review before deployment.
+
+## Offline Support
+
+Onboarding drafts and the mission evidence outbox persist in SQLite. Pathways, matched opportunities,
+official source links, and published module text are cached for reading. Mutations such as pathway
+selection, applications, partner submission, and module publishing still require a live API
+connection; background synchronization and binary media upload are not implemented.
+
 To build an installable Android preview APK, sign in to Expo, link this app to an EAS project when
 prompted, and set `EXPO_PUBLIC_API_URL` in that project's `preview` environment to an API URL
-reachable from the phone. Then run:
+reachable from the phone. The app is linked to the KaushalSetu EAS project in `apps/mobile/app.json`.
+For a personal computer, use the personal computer's LAN address while it and the phone share a
+network; do not reuse the office laptop's hotspot address. Then run:
 
 ```powershell
 npm.cmd exec --yes --package=eas-cli@24.13.0 -- eas login
@@ -70,8 +108,9 @@ npm.cmd run build:android:preview --workspace=@kaushalsetu/mobile
 
 This uses EAS cloud build; a local Android SDK is not required. The build cannot use `localhost` or
 the Android-emulator-only `10.0.2.2` address on a physical phone. A local Wi-Fi API URL only works
-if the phone can reach the laptop through that network and firewall. The default API is not publicly
-hosted, and this workspace is not currently linked to an EAS project.
+if the phone can reach the development computer through that network and firewall. The API is not
+publicly hosted. An EAS preview URL is embedded at build time, so update it whenever the API host
+changes. A public deployment needs HTTPS, production secrets, database hosting, and OTP configuration.
 
 Demo student: `+919000000001`. Onboarding answers are saved locally while entering them, then
 submitted to the API to persist the student profile and three ranked pathway recommendations.
@@ -105,11 +144,20 @@ Parent Trust Mode routes are `GET /parent/children`,
 demo data has no verified local cost estimates; families should confirm safety, travel, eligibility,
 and current costs with their facilitator and provider.
 
+Learning and partner routes include public `GET /sources`, `GET /learning/modules`, and
+`POST /partners/applications`; student-authenticated `GET /learning/advice/:studentId`; and
+facilitator-authenticated `GET/POST /facilitator/modules`, `PATCH /facilitator/modules/:moduleId/publish`,
+`GET /facilitator/partner-applications`, and
+`PATCH /facilitator/partner-applications/:applicationId/status`. See Swagger at `/docs` for the
+request and response schemas. The source directory is reference-only, partner applications are not
+verified, module pricing is metadata only, and the optional LLM endpoint must be configured
+separately.
+
 ## Product flow
 
 Discover -> Learn -> Do -> Prove -> Earn
 
-The implementation is planned in phases: foundation and data model; student onboarding and
-recommendations; learning and missions; wallet and opportunities; facilitator, parent, and admin
-workflows; offline synchronization; then AI enhancements. The implemented slices currently cover
-student onboarding/pathways, mission review/wallet, opportunities/applications, and Parent Trust.
+This is a working prototype, not a production deployment. Live government feeds, verified scheme
+eligibility, BHASHINI API credentials, a production LLM provider, full offline mutation sync, paid
+enrollment/payment processing, organization verification, and production OTP are still required for
+the complete operational experience described in the product brief.

@@ -1,6 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import type { OnboardingAnswers } from '@kaushalsetu/types';
+import type {
+  InitiativeSource,
+  LearningModuleCard,
+  LearningAdvice,
+  OnboardingAnswers,
+  PathwayLearningGuidance,
+} from '@kaushalsetu/types';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ??
@@ -12,6 +18,9 @@ export interface PathwayCard {
   category: string;
   pathwayType: string;
   description: string;
+  learningSteps: PathwayLearningGuidance['learningSteps'];
+  examOptions: PathwayLearningGuidance['examOptions'];
+  guidanceNote: string;
   durationWeeks: number;
   estimatedMonthlyEarningsMin: number;
   estimatedMonthlyEarningsMax: number;
@@ -296,6 +305,18 @@ export async function getWallet(studentId: string): Promise<WalletSummary> {
 
 export async function getMatchedOpportunities(studentId: string): Promise<OpportunityCard[]> {
   return request(`/opportunities/matched/${studentId}`);
+}
+
+export async function getInitiativeSources(): Promise<InitiativeSource[]> {
+  return request('/sources');
+}
+
+export async function getLearningModules(): Promise<LearningModuleCard[]> {
+  return request('/learning/modules');
+}
+
+export async function getLearningAdvice(studentId: string): Promise<LearningAdvice> {
+  return request(`/learning/advice/${studentId}`);
 }
 
 export async function getOpportunity(opportunityId: string): Promise<OpportunityCard> {

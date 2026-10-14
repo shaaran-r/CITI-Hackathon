@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
+import { pathwayLearningGuidance } from './pathway-guidance.js';
 
 @Injectable()
 export class PathwaysService {
@@ -18,6 +19,7 @@ export class PathwaysService {
       category: pathway.category,
       pathwayType: pathway.pathwayType,
       description: pathway.description,
+      ...pathwayLearningGuidance(pathway.slug),
       durationWeeks: pathway.durationWeeks,
       estimatedMonthlyEarningsMin: pathway.estimatedMonthlyEarningsMin,
       estimatedMonthlyEarningsMax: pathway.estimatedMonthlyEarningsMax,

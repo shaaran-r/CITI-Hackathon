@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as Speech from 'expo-speech';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { completeProfile } from '../src/api';
@@ -23,7 +25,34 @@ const colors = {
   muted: '#64766e',
   pale: '#e7eee6',
 };
-const interestOptions = ['agriculture', 'technology', 'health', 'business', 'science', 'design'];
+const interestOptions = [
+  'agriculture',
+  'technology',
+  'health',
+  'business',
+  'science',
+  'design',
+  'education',
+  'crafts',
+  'environment',
+  'food',
+  'hospitality',
+  'public service',
+];
+const interestLabels: Record<string, string> = {
+  agriculture: 'Agriculture · खेती',
+  technology: 'Technology · तकनीक',
+  health: 'Health · स्वास्थ्य',
+  business: 'Business · व्यवसाय',
+  science: 'Science · विज्ञान',
+  design: 'Design · डिज़ाइन',
+  education: 'Education · शिक्षा',
+  crafts: 'Crafts · हस्तकला',
+  environment: 'Environment · पर्यावरण',
+  food: 'Food · भोजन',
+  hospitality: 'Hospitality · आतिथ्य',
+  'public service': 'Public service · जन सेवा',
+};
 const strengthOptions = [
   'communication',
   'observation',
@@ -38,6 +67,58 @@ const languageOptions: [string, string][] = [
   ['mr', 'मराठी'],
   ['bn', 'বাংলা'],
 ];
+const languageLocales: Record<string, string> = {
+  hi: 'hi-IN',
+  en: 'en-IN',
+  mr: 'mr-IN',
+  bn: 'bn-IN',
+};
+const spokenHeadings: Record<string, string[]> = {
+  hi: [
+    'अपने बारे में बताइए',
+    'आपको क्या पसंद है?',
+    'आपका दिन, आपकी सुविधा',
+    'आप आगे क्या करना चाहेंगे?',
+  ],
+  en: [
+    'Tell us about yourself',
+    'What do you enjoy?',
+    'Your day, your way',
+    'What would you like next?',
+  ],
+  mr: [
+    'तुमच्याबद्दल सांगा',
+    'तुम्हाला काय आवडते?',
+    'तुमचा दिवस, तुमच्या सोयीनुसार',
+    'पुढे तुम्हाला काय करायचे आहे?',
+  ],
+  bn: [
+    'আপনার সম্পর্কে বলুন',
+    'আপনার কী ভালো লাগে?',
+    'আপনার দিন, আপনার সুবিধামতো',
+    'এরপর আপনি কী করতে চান?',
+  ],
+};
+const voiceTerms: Record<string, string[]> = {
+  agriculture: ['farming', 'farm', 'खेती', 'कृषि', 'शेती', 'কৃষি', 'চাষ'],
+  technology: ['computer', 'तकनीक', 'कंप्यूटर', 'तंत्रज्ञान', 'প্রযুক্তি', 'কম্পিউটার'],
+  health: ['स्वास्थ्य', 'आरोग्य', 'স্বাস্থ্য', 'healthcare'],
+  business: ['व्यापार', 'कारोबार', 'व्यवसाय', 'ব্যবসা'],
+  science: ['विज्ञान', 'বিজ্ঞান'],
+  design: ['डिजाइन', 'रचना', 'নকশা'],
+  education: ['शिक्षा', 'पढ़ाना', 'शिक्षण', 'শিক্ষা'],
+  crafts: ['हस्तकला', 'कारीगरी', 'हस्तशिल्प', 'কারুশিল্প'],
+  environment: ['पर्यावरण', 'जल', 'पानी', 'परিবেশ'],
+  food: ['खाना', 'भोजन', 'अन्न', 'খাবার'],
+  hospitality: ['मेहमाननवाज़ी', 'आतिथ्य', 'आदरातिथ्य', 'আতিথেয়তা'],
+  'public service': ['जन सेवा', 'समाज सेवा', 'लोकसेवा', 'জনসেবা'],
+  communication: ['बात करना', 'बातचीत', 'संवाद', 'बोलना', 'संभाषण', 'কথা বলা'],
+  observation: ['ध्यान देना', 'निरीक्षण', 'देखना', 'পর্যবেক্ষণ'],
+  planning: ['योजना', 'नियोजन', 'পরিকল্পনা'],
+  'problem-solving': ['समस्या हल', 'समस्या समाधान', 'समस्या सोडवणे', 'সমস্যা সমাধান'],
+  'practical work': ['हाथ का काम', 'व्यावहारिक काम', 'हाताने काम', 'হাতে কাজ'],
+  care: ['देखभाल', 'मदद करना', 'काळजी', 'যত্ন'],
+};
 const timeOptions: [number, string][] = [
   [30, '30 min'],
   [60, '1 hour'],
@@ -78,6 +159,43 @@ export default function OnboardingScreen(): React.JSX.Element {
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceMessage, setVoiceMessage] = useState('');
+  const voiceTarget = useRef<'interests' | 'strengths' | null>(null);
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript?.trim() ?? '';
+    if (!transcript) return;
+    setVoiceTranscript(transcript);
+    if (!event.isFinal || !voiceTarget.current) return;
+
+    const target = voiceTarget.current;
+    const normalized = transcript.toLocaleLowerCase();
+    const options = target === 'interests' ? interestOptions : strengthOptions;
+    const matches = options.filter((option) =>
+      [option, ...(voiceTerms[option] ?? [])].some((term) =>
+        normalized.includes(term.toLocaleLowerCase()),
+      ),
+    );
+    if (matches.length > 0) {
+      setAnswers((current) => ({
+        ...current,
+        [target]: [...new Set([...current[target], ...matches])],
+      }));
+      setVoiceMessage(`Added: ${matches.join(', ')}`);
+    } else {
+      setVoiceMessage('We heard you. Tap the matching options below to add them.');
+    }
+    voiceTarget.current = null;
+  });
+
+  useSpeechRecognitionEvent('end', () => setVoiceActive(false));
+  useSpeechRecognitionEvent('error', (event) => {
+    setVoiceActive(false);
+    voiceTarget.current = null;
+    setVoiceMessage(event.message || 'Voice input stopped. You can choose the options manually.');
+  });
 
   useEffect(() => {
     let active = true;
@@ -99,6 +217,39 @@ export default function OnboardingScreen(): React.JSX.Element {
       key,
       current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
     );
+  }
+
+  async function startVoiceInput(target: 'interests' | 'strengths'): Promise<void> {
+    setVoiceMessage('');
+    setVoiceTranscript('');
+    try {
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!permission.granted) {
+        setVoiceMessage(
+          'Microphone permission is needed for voice input. You can also choose below.',
+        );
+        return;
+      }
+      voiceTarget.current = target;
+      setVoiceActive(true);
+      ExpoSpeechRecognitionModule.start({
+        lang: languageLocales[answers.preferredLanguage] ?? 'hi-IN',
+        interimResults: true,
+        continuous: false,
+      });
+    } catch {
+      voiceTarget.current = null;
+      setVoiceActive(false);
+      setVoiceMessage('Voice input is unavailable. You can choose the options manually.');
+    }
+  }
+
+  function readStepAloud(): void {
+    Speech.stop();
+    const heading = spokenHeadings[answers.preferredLanguage] ?? spokenHeadings.hi ?? [];
+    Speech.speak(heading[step] ?? 'Tell us about yourself', {
+      language: languageLocales[answers.preferredLanguage] ?? 'hi-IN',
+    });
   }
 
   async function next(): Promise<void> {
@@ -153,6 +304,9 @@ export default function OnboardingScreen(): React.JSX.Element {
         <Text style={styles.eyebrow}>YOUR STRENGTHS · AAPKI TAQAT</Text>
         <Text style={styles.title}>{headings[step]?.[0]}</Text>
         <Text style={styles.subtitle}>{headings[step]?.[1]}</Text>
+        <Pressable accessibilityRole="button" onPress={readStepAloud} style={styles.readAloud}>
+          <Text style={styles.readAloudText}>Read this step aloud · सुनें</Text>
+        </Pressable>
 
         {step === 0 && (
           <>
@@ -196,13 +350,47 @@ export default function OnboardingScreen(): React.JSX.Element {
 
         {step === 1 && (
           <>
+            <View style={styles.voiceActions}>
+              {voiceActive ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => ExpoSpeechRecognitionModule.stop()}
+                  style={styles.voiceButton}
+                >
+                  <Text style={styles.voiceButtonText}>Stop listening · रोकें</Text>
+                </Pressable>
+              ) : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void startVoiceInput('interests')}
+                    style={styles.voiceButton}
+                  >
+                    <Text style={styles.voiceButtonText}>Speak interests · बोलें</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void startVoiceInput('strengths')}
+                    style={styles.voiceButton}
+                  >
+                    <Text style={styles.voiceButtonText}>Speak strengths · बोलें</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+            {!!voiceTranscript && <Text style={styles.voiceTranscript}>“{voiceTranscript}”</Text>}
+            {!!voiceMessage && <Text style={styles.voiceMessage}>{voiceMessage}</Text>}
+            <Text style={styles.voicePrivacy}>
+              Your selected phone speech service transcribes voice and may use its network service;
+              KaushalSetu does not save audio.
+            </Text>
             <Text style={styles.label}>Things you enjoy · रुचियाँ</Text>
             <View style={styles.row}>
               {interestOptions.map((item) => (
                 <Choice
                   key={item}
                   selected={answers.interests.includes(item)}
-                  label={item}
+                  label={interestLabels[item] ?? item}
                   onPress={() => toggle('interests', item)}
                 />
               ))}
@@ -452,4 +640,18 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: colors.white, fontSize: 16, fontWeight: '800' },
   saved: { textAlign: 'center', color: colors.muted, fontSize: 12, marginTop: 18 },
+  readAloud: { alignSelf: 'flex-start', minHeight: 40, justifyContent: 'center', marginTop: 4 },
+  readAloudText: { color: colors.leaf, fontWeight: '700', fontSize: 13 },
+  voiceActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  voiceButton: {
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.pale,
+  },
+  voiceButtonText: { color: colors.ink, fontWeight: '800', fontSize: 12 },
+  voiceTranscript: { color: colors.ink, lineHeight: 20, marginTop: 10 },
+  voiceMessage: { color: colors.leaf, lineHeight: 19, marginTop: 5 },
+  voicePrivacy: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 6 },
 });

@@ -9,9 +9,12 @@ import { JwtAuthGuard } from './common/jwt-auth.guard.js';
 import { RolesGuard } from './common/roles.guard.js';
 import { DatabaseModule } from './database.module.js';
 import { HealthController } from './health.controller.js';
+import { InitiativesModule } from './initiatives/initiatives.module.js';
+import { LearningModule } from './learning/learning.module.js';
 import { MissionsModule } from './missions/missions.module.js';
 import { OpportunitiesModule } from './opportunities/opportunities.module.js';
 import { ParentModule } from './parent/parent.module.js';
+import { PartnersModule } from './partners/partners.module.js';
 import { PathwaysModule } from './pathways/pathways.module.js';
 import { ProfilingModule } from './profiling/profiling.module.js';
 import { StudentsModule } from './students/students.module.js';
@@ -25,6 +28,9 @@ import { WalletModule } from './wallet/wallet.module.js';
     AuthModule,
     StudentsModule,
     ProfilingModule,
+    InitiativesModule,
+    LearningModule,
+    PartnersModule,
     PathwaysModule,
     MissionsModule,
     OpportunitiesModule,
