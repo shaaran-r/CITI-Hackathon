@@ -129,7 +129,7 @@ export default function WalletScreen(): React.JSX.Element {
             {wallet.badges.length ? (
               wallet.badges.map((badge) => (
                 <View key={badge.id} style={styles.badgeRow}>
-                  <View style={styles.badgeMark}>✦</View>
+                  <Text style={styles.badgeMark}>✦</Text>
                   <View style={styles.badgeCopy}>
                     <Text style={styles.badgeTitle}>{badge.title}</Text>
                     <Text style={styles.small}>{badge.description}</Text>

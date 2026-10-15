@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: kaushalsetu-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.api
+    dockerCommand: >-
+      sh -c "npm run db:migrate:deploy:runtime --workspace=@kaushalsetu/database
+      && npm exec --workspace=@kaushalsetu/database -- tsx prisma/seed.ts
+      && npm run start --workspace=@kaushalsetu/api"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: DATABASE_URL
+        value: file:/var/lib/kaushalsetu/kaushalsetu.db
+      - key: OTP_PROVIDER
+        value: mock
+      - key: DEV_OTP_CODE
+        value: "123456"
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: ENABLE_SWAGGER
+        value: "false"

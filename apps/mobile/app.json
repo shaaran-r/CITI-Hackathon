@@ -18,12 +18,20 @@
         }
       ]
     ],
-    "experiments": { "typedRoutes": true },
-    "android": { "package": "org.kaushalsetu.mobile" },
-    "owner": "sharan-1447",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "org.kaushalsetu.mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "owner": "sharan_00123",
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "4a7de188-b306-4caf-aa4f-65faa3e0c1a6"
+        "projectId": "4a3ebe37-a51e-4156-8b3b-4dc50731fd2c"
       }
     }
   }

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { requireOptionalNativeModule } from 'expo';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Speech from 'expo-speech';
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { completeProfile } from '../src/api';
@@ -14,6 +14,41 @@ import type {
   Mobility,
   OnboardingAnswers,
 } from '@kaushalsetu/types';
+
+type SpeechRecognitionSubscription = {
+  remove(): void;
+};
+
+type SpeechRecognitionResultEvent = {
+  isFinal: boolean;
+  results: Array<{ transcript: string }>;
+};
+
+type SpeechRecognitionErrorEvent = {
+  message: string;
+};
+
+type SpeechRecognitionModule = {
+  requestPermissionsAsync(): Promise<{ granted: boolean }>;
+  start(options: {
+    lang: string;
+    interimResults: boolean;
+    continuous: boolean;
+  }): void;
+  stop(): void;
+  addListener(
+    eventName: 'result',
+    listener: (event: SpeechRecognitionResultEvent) => void,
+  ): SpeechRecognitionSubscription;
+  addListener(eventName: 'end', listener: () => void): SpeechRecognitionSubscription;
+  addListener(
+    eventName: 'error',
+    listener: (event: SpeechRecognitionErrorEvent) => void,
+  ): SpeechRecognitionSubscription;
+};
+
+const speechRecognitionModule =
+  requireOptionalNativeModule<SpeechRecognitionModule>('ExpoSpeechRecognition');
 
 const colors = {
   ink: '#183b32',
@@ -164,38 +199,49 @@ export default function OnboardingScreen(): React.JSX.Element {
   const [voiceMessage, setVoiceMessage] = useState('');
   const voiceTarget = useRef<'interests' | 'strengths' | null>(null);
 
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results[0]?.transcript?.trim() ?? '';
-    if (!transcript) return;
-    setVoiceTranscript(transcript);
-    if (!event.isFinal || !voiceTarget.current) return;
+  useEffect(() => {
+    if (!speechRecognitionModule) return;
 
-    const target = voiceTarget.current;
-    const normalized = transcript.toLocaleLowerCase();
-    const options = target === 'interests' ? interestOptions : strengthOptions;
-    const matches = options.filter((option) =>
-      [option, ...(voiceTerms[option] ?? [])].some((term) =>
-        normalized.includes(term.toLocaleLowerCase()),
-      ),
-    );
-    if (matches.length > 0) {
-      setAnswers((current) => ({
-        ...current,
-        [target]: [...new Set([...current[target], ...matches])],
-      }));
-      setVoiceMessage(`Added: ${matches.join(', ')}`);
-    } else {
-      setVoiceMessage('We heard you. Tap the matching options below to add them.');
-    }
-    voiceTarget.current = null;
-  });
+    const subscriptions = [
+      speechRecognitionModule.addListener('result', (event) => {
+        const transcript = event.results[0]?.transcript?.trim() ?? '';
+        if (!transcript) return;
+        setVoiceTranscript(transcript);
+        if (!event.isFinal || !voiceTarget.current) return;
 
-  useSpeechRecognitionEvent('end', () => setVoiceActive(false));
-  useSpeechRecognitionEvent('error', (event) => {
-    setVoiceActive(false);
-    voiceTarget.current = null;
-    setVoiceMessage(event.message || 'Voice input stopped. You can choose the options manually.');
-  });
+        const target = voiceTarget.current;
+        const normalized = transcript.toLocaleLowerCase();
+        const options = target === 'interests' ? interestOptions : strengthOptions;
+        const matches = options.filter((option) =>
+          [option, ...(voiceTerms[option] ?? [])].some((term) =>
+            normalized.includes(term.toLocaleLowerCase()),
+          ),
+        );
+        if (matches.length > 0) {
+          setAnswers((current) => ({
+            ...current,
+            [target]: [...new Set([...current[target], ...matches])],
+          }));
+          setVoiceMessage(`Added: ${matches.join(', ')}`);
+        } else {
+          setVoiceMessage('We heard you. Tap the matching options below to add them.');
+        }
+        voiceTarget.current = null;
+      }),
+      speechRecognitionModule.addListener('end', () => setVoiceActive(false)),
+      speechRecognitionModule.addListener('error', (event) => {
+        setVoiceActive(false);
+        voiceTarget.current = null;
+        setVoiceMessage(
+          event.message || 'Voice input stopped. You can choose the options manually.',
+        );
+      }),
+    ];
+
+    return () => {
+      subscriptions.forEach((subscription) => subscription.remove());
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -222,8 +268,14 @@ export default function OnboardingScreen(): React.JSX.Element {
   async function startVoiceInput(target: 'interests' | 'strengths'): Promise<void> {
     setVoiceMessage('');
     setVoiceTranscript('');
+    if (!speechRecognitionModule) {
+      setVoiceMessage(
+        'Voice input needs a KaushalSetu development or preview build. You can choose the options manually in Expo Go.',
+      );
+      return;
+    }
     try {
-      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const permission = await speechRecognitionModule.requestPermissionsAsync();
       if (!permission.granted) {
         setVoiceMessage(
           'Microphone permission is needed for voice input. You can also choose below.',
@@ -232,7 +284,7 @@ export default function OnboardingScreen(): React.JSX.Element {
       }
       voiceTarget.current = target;
       setVoiceActive(true);
-      ExpoSpeechRecognitionModule.start({
+      speechRecognitionModule.start({
         lang: languageLocales[answers.preferredLanguage] ?? 'hi-IN',
         interimResults: true,
         continuous: false,
@@ -354,7 +406,7 @@ export default function OnboardingScreen(): React.JSX.Element {
               {voiceActive ? (
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => ExpoSpeechRecognitionModule.stop()}
+                  onPress={() => speechRecognitionModule?.stop()}
                   style={styles.voiceButton}
                 >
                   <Text style={styles.voiceButtonText}>Stop listening · रोकें</Text>
