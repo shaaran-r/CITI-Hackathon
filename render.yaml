@@ -4,10 +4,7 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile.api
-    dockerCommand: >-
-      npm run db:migrate:deploy:runtime --workspace=@kaushalsetu/database
-      && npm exec --workspace=@kaushalsetu/database -- tsx prisma/seed.ts
-      && npm run start --workspace=@kaushalsetu/api
+    dockerCommand: npm run start:render
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
